@@ -124,6 +124,17 @@ lazy val protos = crossProject(JSPlatform, JVMPlatform)
 lazy val protosJVM = protos.jvm
 lazy val protosJS = protos.js
 
+lazy val chimneyLite = project
+  .in(file("chimneyLite"))
+  .settings(
+    moduleName := "chimney-lite",
+    name := "chimney-lite",
+    version := "0.1.0",
+    scalaVersion := "3.1.0",
+    libraryDependencies += "com.lihaoyi" %% "utest" % "0.7.10" % "test",
+    testFrameworks += new TestFramework("utest.runner.Framework")
+  )
+
 
 lazy val publishSettings = Seq(
   organization := "io.scalaland",

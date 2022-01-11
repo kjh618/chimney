@@ -10,3 +10,4 @@ project/target
 project/metals.sbt
 docs/build
 .bsp
+.DS_Store
