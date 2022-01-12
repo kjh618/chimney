@@ -1,6 +1,7 @@
 package io.scalaland.chimney
 
 import io.scalaland.chimney.dsl.TransformerDefinition
+
 import scala.deriving.Mirror
 
 trait Transformer[From, To] {

@@ -1,12 +1,13 @@
 package io.scalaland.chimney.internal.dsl
 
 import io.scalaland.chimney.Transformer
-import io.scalaland.chimney.dsl._
+import io.scalaland.chimney.dsl.*
 import io.scalaland.chimney.internal.utils.MacroUtils
+import io.scalaland.chimney.internal.inlineTransform
 
+import scala.compiletime.{constValue, erasedValue, summonInline}
 import scala.deriving.Mirror
 import scala.quoted.*
-import scala.compiletime.{erasedValue, constValue, summonInline}
 
 object TransformerDefinitionImpl {
 
@@ -54,6 +55,7 @@ object TransformerDefinitionImpl {
       destFieldName: Expr[Any]
   )(using Quotes): Expr[DestFieldType] = {
     import quotes.reflect.*
+
     // TODO: https://dotty.epfl.ch/api/scala/quoted/Quotes$reflectModule$SymbolMethods.html
     val srcFields = TypeTree.of[From].symbol.caseFields
     val srcFieldTypes = srcFields.map(TypeRepr.of[From].memberType)
@@ -65,13 +67,16 @@ object TransformerDefinitionImpl {
     val selectSrcField = Select(src.asTerm, srcField)
     if (srcFieldType <:< TypeRepr.of[DestFieldType]) {
       selectSrcField.asExprOf[DestFieldType]
-    } else {
+    } else { // TODO: Check if a given transformer exists
       val destFieldMirror = Expr.summon[Mirror.ProductOf[DestFieldType]].get // TODO
       srcFieldType.asType match {
         case '[t] =>
           '{
-            val transformer = Transformer.define[t, DestFieldType].buildTransformer(using $destFieldMirror)
-            transformer.transform(${ selectSrcField.asExprOf[t] })
+            inlineTransform[t, DestFieldType](${ selectSrcField.asExprOf[t] })(using $destFieldMirror)
+
+//            val transformer = Transformer.define[t, DestFieldType].buildTransformer(using $destFieldMirror)
+//            transformer.transform(${ selectSrcField.asExprOf[t] })
+
 //            ${ selectSrcField.asExprOf[t] }.transformInto[DestFieldType]
           }
       }

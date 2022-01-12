@@ -1,9 +1,9 @@
 package io.scalaland.chimney
 
-import utest.*
 import io.scalaland.chimney.dsl.*
 import io.scalaland.chimney.internal.dsl.TransformerDefinitionImpl
 import io.scalaland.chimney.internal.utils.MacroUtils.inspect
+import utest.*
 
 object DslSpec extends TestSuite {
 
