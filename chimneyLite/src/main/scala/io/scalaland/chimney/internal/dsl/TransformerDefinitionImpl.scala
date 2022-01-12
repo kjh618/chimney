@@ -1,12 +1,12 @@
 package io.scalaland.chimney.internal.dsl
 
 import io.scalaland.chimney.Transformer
-import io.scalaland.chimney.dsl.TransformerDefinition
+import io.scalaland.chimney.dsl._
 import io.scalaland.chimney.internal.utils.MacroUtils
 
 import scala.deriving.Mirror
 import scala.quoted.*
-import scala.compiletime.{summonAll, summonInline, erasedValue, constValue}
+import scala.compiletime.{erasedValue, constValue, summonInline}
 
 object TransformerDefinitionImpl {
 
@@ -21,19 +21,15 @@ object TransformerDefinitionImpl {
   }
 
   def buildTransformerImpl[From: Type, To: Type](
-      transformerDefinition: Expr[TransformerDefinition[From, To]]
-  )(using Quotes): Expr[Transformer[From, To]] = {
-    (Expr.summon[Mirror.ProductOf[From]], Expr.summon[Mirror.ProductOf[To]]) match {
-      case (Some(srcMirror), Some(destMirror)) =>
-        '{
-          new Transformer[From, To] {
-            def transform(src: From): To =
-              getDest(src, $destMirror)
-          }
-        }
-      case _ => ???
+      transformerDefinition: Expr[TransformerDefinition[From, To]],
+      destMirror: Expr[Mirror.ProductOf[To]]
+  )(using Quotes): Expr[Transformer[From, To]] =
+    '{
+      new Transformer[From, To] {
+        def transform(src: From): To =
+          getDest(src, $destMirror)
+      }
     }
-  }
 
   inline def getDest[From, To](inline src: From, destMirror: Mirror.ProductOf[To]): To = {
     val destFieldValues = getDestFieldValues[From, destMirror.MirroredElemLabels, destMirror.MirroredElemTypes](src)
@@ -45,19 +41,40 @@ object TransformerDefinitionImpl {
   ): DestFieldTypes =
     inline (erasedValue[DestFieldNames], erasedValue[DestFieldTypes]) match {
       case _: ((nameHead *: nameTail), (typeHead *: typeTail)) =>
-        getDestFieldValue[From, typeHead](constValue[nameHead], src) *:
+        getDestFieldValue[From, typeHead](src, constValue[nameHead]) *:
           getDestFieldValues[From, nameTail, typeTail](src)
       case _: (EmptyTuple, EmptyTuple) => EmptyTuple
     }
 
-  inline def getDestFieldValue[From, T](inline destFieldName: Any, inline src: From): T =
-    ${ getDestFieldValueImpl[From, T]('destFieldName, 'src) }
+  inline def getDestFieldValue[From, DestFieldType](inline src: From, inline destFieldName: Any): DestFieldType =
+    ${ getDestFieldValueImpl[From, DestFieldType]('src, 'destFieldName) }
 
-  def getDestFieldValueImpl[From: Type, T: Type](destFieldName: Expr[Any], src: Expr[From])(using Quotes): Expr[T] = {
+  def getDestFieldValueImpl[From: Type, DestFieldType: Type](
+      src: Expr[From],
+      destFieldName: Expr[Any]
+  )(using Quotes): Expr[DestFieldType] = {
     import quotes.reflect.*
     // TODO: https://dotty.epfl.ch/api/scala/quoted/Quotes$reflectModule$SymbolMethods.html
     val srcFields = TypeTree.of[From].symbol.caseFields
-    val srcField = srcFields.find(_.name == destFieldName.asExprOf[String].valueOrError).get
-    Select(src.asTerm, srcField).asExprOf[T]
+    val srcFieldTypes = srcFields.map(TypeRepr.of[From].memberType)
+
+    val (srcField, srcFieldType) = (srcFields zip srcFieldTypes)
+      .find((srcField, srcFieldType) => srcField.name == destFieldName.asExprOf[String].valueOrError)
+      .get // TODO
+
+    val selectSrcField = Select(src.asTerm, srcField)
+    if (srcFieldType <:< TypeRepr.of[DestFieldType]) {
+      selectSrcField.asExprOf[DestFieldType]
+    } else {
+      val destFieldMirror = Expr.summon[Mirror.ProductOf[DestFieldType]].get // TODO
+      srcFieldType.asType match {
+        case '[t] =>
+          '{
+            val transformer = Transformer.define[t, DestFieldType].buildTransformer(using $destFieldMirror)
+            transformer.transform(${ selectSrcField.asExprOf[t] })
+//            ${ selectSrcField.asExprOf[t] }.transformInto[DestFieldType]
+          }
+      }
+    }
   }
 }
