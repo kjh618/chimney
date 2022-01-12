@@ -11,17 +11,17 @@ object DslSpec extends TestSuite {
 
     "1" - {
       case class Value(a: Int)
-      case class Values(a: Int, b: Int, c: Int)
+      case class Values1(a: Int, b: Int, c: Int)
+      case class Values2(a: Int, b: Int, c: Int)
 
       val transformer = Transformer
-        .define[Value, Values]
+        .define[Values1, Values2]
         .withFieldConst(_.b, 2)
         .withFieldConst(_.c, 3)
-        .inspect()
         .buildTransformer
         .inspect()
 
-      transformer.transform(Value(1)) ==> Values(1, 2, 3)
+      transformer.transform(Values1(1, 1, 1)) ==> Values2(1, 2, 3)
     }
   }
 }

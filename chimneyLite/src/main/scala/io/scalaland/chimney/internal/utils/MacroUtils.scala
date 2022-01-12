@@ -4,6 +4,13 @@ import scala.quoted._
 
 object MacroUtils {
 
+  extension [T](inline x: T) inline def inspect(): T = ${ inspectImpl('x) }
+
+  private def inspectImpl[T](x: Expr[T])(using Quotes): Expr[T] = {
+    println(x.show)
+    x
+  }
+
   def extractNameFromSelectorImpl[To: Type, T: Type](code: Expr[To => T])(using Quotes): Expr[String] =
     import quotes.reflect.*
     code.asTerm match
@@ -24,11 +31,4 @@ object MacroUtils {
   private def normalizeLambdaMessage(lambdaShow: String): String =
     lambdaShow.replaceAll("""_\$\d+""", "x")
   end normalizeLambdaMessage
-
-  extension [T](inline x: T) inline def inspect(): T = ${ inspectImpl('x) }
-
-  private def inspectImpl[T](x: Expr[T])(using Quotes): Expr[T] = {
-    println(x.show)
-    x
-  }
 }
