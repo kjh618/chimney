@@ -1,6 +1,6 @@
 package io.scalaland.chimney.internal.utils
 
-import scala.quoted._
+import scala.quoted.*
 
 object MacroUtils {
 
