@@ -2,11 +2,10 @@ package io.scalaland.chimney.internal.dsl
 
 import io.scalaland.chimney.Transformer
 import io.scalaland.chimney.dsl.*
-import io.scalaland.chimney.internal.utils.MacroUtils
 import io.scalaland.chimney.internal.inlineTransform
+import io.scalaland.chimney.internal.utils.MacroUtils
 
 import scala.compiletime.{constValue, erasedValue, summonInline}
-import scala.deriving.Mirror
 import scala.quoted.*
 
 object TransformerDefinitionImpl {
@@ -22,63 +21,58 @@ object TransformerDefinitionImpl {
   }
 
   def buildTransformerImpl[From: Type, To: Type](
-      transformerDefinition: Expr[TransformerDefinition[From, To]],
-      destMirror: Expr[Mirror.ProductOf[To]]
+      transformerDefinition: Expr[TransformerDefinition[From, To]]
   )(using Quotes): Expr[Transformer[From, To]] =
     '{
       new Transformer[From, To] {
         def transform(src: From): To =
-          getDest(src, $destMirror)
+          ${ genTransformBody[From, To]('src) }
       }
     }
 
-  inline def getDest[From, To](inline src: From, destMirror: Mirror.ProductOf[To]): To = {
-    val destFieldValues = getDestFieldValues[From, destMirror.MirroredElemLabels, destMirror.MirroredElemTypes](src)
-    destMirror.fromProduct(destFieldValues)
-  }
+  def genTransformBody[From: Type, To: Type](src: Expr[From])(using Quotes): Expr[To] = {
+    import quotes.reflect.*
 
-  inline def getDestFieldValues[From, DestFieldNames <: Tuple, DestFieldTypes <: Tuple](
-      inline src: From
-  ): DestFieldTypes =
-    inline (erasedValue[DestFieldNames], erasedValue[DestFieldTypes]) match {
-      case _: ((nameHead *: nameTail), (typeHead *: typeTail)) =>
-        getDestFieldValue[From, typeHead](src, constValue[nameHead]) *:
-          getDestFieldValues[From, nameTail, typeTail](src)
-      case _: (EmptyTuple, EmptyTuple) => EmptyTuple
+    val destTypeRepr = TypeRepr.of[To]
+    val destTypeSymbol = destTypeRepr.typeSymbol
+    val destFieldSymbols = destTypeSymbol.caseFields
+    val destFieldNames = destFieldSymbols.map(_.name)
+    val destFieldTypeReprs = destFieldSymbols.map(destTypeRepr.memberType)
+
+    val destFieldValues = (destFieldNames zip destFieldTypeReprs).map { (destFieldName, destFieldTypeRepr) =>
+      destFieldTypeRepr.asType match {
+        case '[destFieldType] => genDestFieldValue[From, destFieldType](src, destFieldName)
+      }
     }
 
-  inline def getDestFieldValue[From, DestFieldType](inline src: From, inline destFieldName: Any): DestFieldType =
-    ${ getDestFieldValueImpl[From, DestFieldType]('src, 'destFieldName) }
+    val destConstructorSymbol = destTypeSymbol.primaryConstructor // TODO: Handle noSymbol
+    val destFieldValueTerms = destFieldValues.map(_.asTerm)
 
-  def getDestFieldValueImpl[From: Type, DestFieldType: Type](
+    New(Inferred(destTypeRepr)).select(destConstructorSymbol).appliedToArgs(destFieldValueTerms).asExprOf[To]
+  }
+
+  def genDestFieldValue[From: Type, DestFieldType: Type](
       src: Expr[From],
-      destFieldName: Expr[Any]
+      destFieldName: String
   )(using Quotes): Expr[DestFieldType] = {
     import quotes.reflect.*
 
-    // TODO: https://dotty.epfl.ch/api/scala/quoted/Quotes$reflectModule$SymbolMethods.html
-    val srcFields = TypeTree.of[From].symbol.caseFields
-    val srcFieldTypes = srcFields.map(TypeRepr.of[From].memberType)
+    val srcTypeRepr = TypeRepr.of[From]
+    val srcFieldSymbols = srcTypeRepr.typeSymbol.caseFields
+    val srcFieldTypeReprs = srcFieldSymbols.map(srcTypeRepr.memberType)
 
-    val (srcField, srcFieldType) = (srcFields zip srcFieldTypes)
-      .find((srcField, srcFieldType) => srcField.name == destFieldName.asExprOf[String].valueOrError)
+    val (srcFieldSymbol, srcFieldTypeRepr) = (srcFieldSymbols zip srcFieldTypeReprs)
+      .find((symbol, _) => symbol.name == destFieldName)
       .get // TODO
 
-    val selectSrcField = Select(src.asTerm, srcField)
-    if (srcFieldType <:< TypeRepr.of[DestFieldType]) {
-      selectSrcField.asExprOf[DestFieldType]
+    val selectSrcFieldTerm = src.asTerm.select(srcFieldSymbol)
+
+    if (srcFieldTypeRepr <:< TypeRepr.of[DestFieldType]) {
+      selectSrcFieldTerm.asExprOf[DestFieldType]
     } else { // TODO: Check if a given transformer exists
-      val destFieldMirror = Expr.summon[Mirror.ProductOf[DestFieldType]].get // TODO
-      srcFieldType.asType match {
-        case '[t] =>
-          '{
-            inlineTransform[t, DestFieldType](${ selectSrcField.asExprOf[t] })(using $destFieldMirror)
-
-//            val transformer = Transformer.define[t, DestFieldType].buildTransformer(using $destFieldMirror)
-//            transformer.transform(${ selectSrcField.asExprOf[t] })
-
-//            ${ selectSrcField.asExprOf[t] }.transformInto[DestFieldType]
-          }
+      srcFieldTypeRepr.asType match {
+        case '[srcFieldType] =>
+          '{ inlineTransform[srcFieldType, DestFieldType](${ selectSrcFieldTerm.asExprOf[srcFieldType] }) }
       }
     }
   }

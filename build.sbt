@@ -11,7 +11,8 @@ val settings = Seq(
   crossScalaVersions := Seq(versions.scala212, versions.scala213),
   scalacOptions ++= Seq(
     "-target:jvm-1.8",
-    "-encoding", "UTF-8",
+    "-encoding",
+    "UTF-8",
     "-unchecked",
     "-deprecation",
     "-explaintypes",
@@ -51,7 +52,7 @@ val settings = Seq(
         "-Xlint:unsound-match",
         "-Xlint:nullary-override"
       )
-    ),
+  ),
   scalacOptions in (Compile, console) --= Seq("-Ywarn-unused:imports", "-Xfatal-warnings")
 )
 
@@ -131,10 +132,10 @@ lazy val chimneyLite = project
     name := "chimney-lite",
     version := "0.1.0",
     scalaVersion := "3.1.0",
+    scalacOptions += "-Xcheck-macros",
     libraryDependencies += "com.lihaoyi" %% "utest" % "0.7.10" % "test",
     testFrameworks += new TestFramework("utest.runner.Framework")
   )
-
 
 lazy val publishSettings = Seq(
   organization := "io.scalaland",
