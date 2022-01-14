@@ -4,31 +4,32 @@ import scala.quoted.*
 
 object MacroUtils {
 
-  extension [T](inline x: T) inline def inspect(): T = ${ inspectImpl('x) }
-
-  private def inspectImpl[T](x: Expr[T])(using Quotes): Expr[T] = {
-    println(x.show)
-    x
-  }
-
-  def extractNameFromSelectorImpl[To: Type, T: Type](code: Expr[To => T])(using Quotes): Expr[String] =
+  // TODO
+  def extractNameFromSelector[To: Type, T: Type](selector: Expr[To => T])(using Quotes): String = {
     import quotes.reflect.*
-    code.asTerm match
+    selector.asTerm match
       case InlinedLambda(List(ValDef(identVal, _, _)), t @ Select(Ident(identExtract), name))
           if identVal == identExtract =>
-        Expr(name)
-      case t => report.throwError(s"Illegal selector: ${normalizeLambdaMessage(code.show)}")
+        name
+      case t => report.throwError(s"Illegal selector: ${normalizeLambdaMessage(selector.show)}")
+  }
 
-  object InlinedLambda:
+  object InlinedLambda {
     def unapply(using Quotes)(arg: quotes.reflect.Term): Option[(List[quotes.reflect.ValDef], quotes.reflect.Term)] =
       import quotes.reflect.*
       arg match
         case Inlined(_, _, Lambda(vals, term)) => Some((vals, term))
         case Inlined(_, _, nested)             => InlinedLambda.unapply(nested)
         case t                                 => None
-  end InlinedLambda
+  }
 
   private def normalizeLambdaMessage(lambdaShow: String): String =
     lambdaShow.replaceAll("""_\$\d+""", "x")
-  end normalizeLambdaMessage
+
+  extension [T](inline x: T) inline def inspect(): T = ${ inspectImpl('x) }
+
+  private def inspectImpl[T](x: Expr[T])(using Quotes): Expr[T] = {
+    println(x.show)
+    x
+  }
 }

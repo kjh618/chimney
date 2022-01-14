@@ -1,12 +1,17 @@
 package io.scalaland.chimney.internal
 
+import io.scalaland.chimney.dsl.TransformerDefinition
 import io.scalaland.chimney.internal.InlineTransformer
 
+import scala.compiletime.erasedValue
 import scala.quoted.*
 
 object TransformerMacros {
 
-  def genTransformBody[From: Type, To: Type](src: Expr[From])(using Quotes): Expr[To] = {
+  def genTransformBody[From: Type, To: Type, TransformerOperations <: Tuple: Type](
+      transformerDefinition: Expr[TransformerDefinition[From, To, TransformerOperations]],
+      src: Expr[From]
+  )(using Quotes): Expr[To] = {
     import quotes.reflect.*
 
     val destTypeRepr = TypeRepr.of[To]
@@ -17,40 +22,69 @@ object TransformerMacros {
 
     val destFieldValues = (destFieldNames zip destFieldTypeReprs).map { (destFieldName, destFieldTypeRepr) =>
       destFieldTypeRepr.asType match {
-        case '[destFieldType] => genDestFieldValue[From, destFieldType](src, destFieldName)
+        case '[destFieldType] =>
+          genDestFieldValue[From, To, TransformerOperations, destFieldType](transformerDefinition, src, destFieldName)
       }
     }
 
     val destConstructorSymbol = destTypeSymbol.primaryConstructor // TODO: Handle noSymbol
     val destFieldValueTerms = destFieldValues.map(_.asTerm)
 
+    // "new $To(${ destFieldValues(0) }, ...)"
     New(Inferred(destTypeRepr)).select(destConstructorSymbol).appliedToArgs(destFieldValueTerms).asExprOf[To]
   }
 
-  def genDestFieldValue[From: Type, DestFieldType: Type](
+  def genDestFieldValue[From: Type, To: Type, TransformerOperations <: Tuple: Type, DestFieldType: Type](
+      transformerDefinition: Expr[TransformerDefinition[From, To, TransformerOperations]],
       src: Expr[From],
       destFieldName: String
   )(using Quotes): Expr[DestFieldType] = {
     import quotes.reflect.*
 
-    val srcTypeRepr = TypeRepr.of[From]
-    val srcFieldSymbols = srcTypeRepr.typeSymbol.caseFields
-    val srcFieldTypeReprs = srcFieldSymbols.map(srcTypeRepr.memberType)
+    genDestFieldValueFromOverrides[From, To, TransformerOperations, DestFieldType](
+      transformerDefinition,
+      destFieldName
+    ) match {
+      case Some(destFieldValueFromOverrides) => destFieldValueFromOverrides
+      case None =>
+        val srcTypeRepr = TypeRepr.of[From]
+        val srcFieldSymbols = srcTypeRepr.typeSymbol.caseFields
+        val srcFieldTypeReprs = srcFieldSymbols.map(srcTypeRepr.memberType)
 
-    val (srcFieldSymbol, srcFieldTypeRepr) = (srcFieldSymbols zip srcFieldTypeReprs)
-      .find((symbol, _) => symbol.name == destFieldName)
-      .get // TODO
+        val (srcFieldSymbol, srcFieldTypeRepr) = (srcFieldSymbols zip srcFieldTypeReprs)
+          .find((symbol, _) => symbol.name == destFieldName)
+          .get // TODO
 
-    val selectSrcFieldTerm = src.asTerm.select(srcFieldSymbol)
+        // "$src.$srcFieldSymbol"
+        val selectSrcFieldTerm = src.asTerm.select(srcFieldSymbol)
 
-    if (srcFieldTypeRepr <:< TypeRepr.of[DestFieldType]) {
-      selectSrcFieldTerm.asExprOf[DestFieldType]
-    } else { // TODO: Check if a given transformer exists
-      srcFieldTypeRepr.asType match {
-        case '[srcFieldType] =>
-          val selectSrcField = selectSrcFieldTerm.asExprOf[srcFieldType]
-          '{ InlineTransformer.inlineTransform[srcFieldType, DestFieldType]($selectSrcField) }
-      }
+        if (srcFieldTypeRepr <:< TypeRepr.of[DestFieldType]) {
+          selectSrcFieldTerm.asExprOf[DestFieldType]
+        } else { // TODO: Check if a given transformer exists
+          srcFieldTypeRepr.asType match {
+            case '[srcFieldType] =>
+              val selectSrcField = selectSrcFieldTerm.asExprOf[srcFieldType]
+              '{ InlineTransformer.inlineTransform[srcFieldType, DestFieldType]($selectSrcField) }
+          }
+        }
     }
   }
+
+  def genDestFieldValueFromOverrides[
+      From: Type,
+      To: Type,
+      TransformerOperations <: Tuple: Type,
+      DestFieldType: Type
+  ](
+      transformerDefinition: Expr[TransformerDefinition[From, To, ? <: Tuple]],
+      destFieldName: String
+  )(using Quotes): Option[Expr[DestFieldType]] =
+    Type.of[TransformerOperations] match {
+      case '[TransformerOperation.FieldConst[name] *: tail]
+          if Type.valueOfConstant[name].get == destFieldName => // TODO
+        Some('{ $transformerDefinition.overrides(${ Expr(destFieldName) }).asInstanceOf[DestFieldType] })
+      case '[_ *: tail] =>
+        genDestFieldValueFromOverrides[From, To, tail, DestFieldType](transformerDefinition, destFieldName)
+      case '[EmptyTuple] => None
+    }
 }
