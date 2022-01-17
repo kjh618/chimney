@@ -125,11 +125,11 @@ lazy val protos = crossProject(JSPlatform, JVMPlatform)
 lazy val protosJVM = protos.jvm
 lazy val protosJS = protos.js
 
-lazy val chimneyLite = project
-  .in(file("chimneyLite"))
+lazy val chimney3Reflection = project
+  .in(file("chimney3Reflection"))
   .settings(
-    moduleName := "chimney-lite",
-    name := "chimney-lite",
+    moduleName := "chimney3-reflection",
+    name := "chimney3-reflection",
     version := "0.1.0",
     scalaVersion := "3.1.0",
     scalacOptions += "-Xcheck-macros",
