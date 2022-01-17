@@ -1,9 +1,11 @@
 package io.scalaland.chimney.internal
 
+import io.scalaland.chimney.Transformer
 import io.scalaland.chimney.dsl.TransformerDefinition
 import io.scalaland.chimney.internal.InlineTransformer
 
 import scala.compiletime.erasedValue
+import scala.deriving.Mirror
 import scala.quoted.*
 
 object TransformerMacros {
@@ -13,6 +15,10 @@ object TransformerMacros {
       src: Expr[From]
   )(using Quotes): Expr[To] = {
     import quotes.reflect.*
+
+    if (Expr.summon[Mirror.ProductOf[To]].isEmpty) {
+      ??? // TODO
+    }
 
     val destTypeRepr = TypeRepr.of[To]
     val destTypeSymbol = destTypeRepr.typeSymbol
@@ -60,11 +66,14 @@ object TransformerMacros {
 
         if (srcFieldTypeRepr <:< TypeRepr.of[DestFieldType]) {
           selectSrcFieldTerm.asExprOf[DestFieldType]
-        } else { // TODO: Check if a given transformer exists
+        } else {
           srcFieldTypeRepr.asType match {
             case '[srcFieldType] =>
               val selectSrcField = selectSrcFieldTerm.asExprOf[srcFieldType]
-              '{ InlineTransformer.inlineTransform[srcFieldType, DestFieldType]($selectSrcField) }
+              Expr.summon[Transformer[srcFieldType, DestFieldType]] match {
+                case Some(t) => '{ $t.transform($selectSrcField) }
+                case None    => '{ InlineTransformer.inlineTransform[srcFieldType, DestFieldType]($selectSrcField) }
+              }
           }
         }
     }

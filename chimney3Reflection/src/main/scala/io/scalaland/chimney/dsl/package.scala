@@ -2,11 +2,16 @@ package io.scalaland.chimney.dsl
 
 import io.scalaland.chimney.Transformer
 
+import scala.compiletime.summonFrom
+
 extension [From](src: From) {
 
-  def into[To](using transformer: Transformer[From, To]): Transformer[From, To] =
-    transformer
+  def into[To]: TransformerInto[From, To, EmptyTuple] =
+    TransformerInto(src, TransformerDefinition(Map.empty))
 
-  def transformInto[To](using transformer: Transformer[From, To]): To =
-    transformer.transform(src)
+  inline def transformInto[To]: To =
+    summonFrom {
+      case t: Transformer[From, To] => t.transform(src)
+      case _                        => Transformer.derive[From, To].transform(src)
+    }
 }

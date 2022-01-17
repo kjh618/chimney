@@ -132,7 +132,7 @@ lazy val chimney3Reflection = project
     name := "chimney3-reflection",
     version := "0.1.0",
     scalaVersion := "3.1.0",
-    scalacOptions += "-Xcheck-macros",
+//    scalacOptions += "-Xcheck-macros", // Produces `Tree had an unexpected owner for ...` error
     libraryDependencies += "com.lihaoyi" %% "utest" % "0.7.10" % "test",
     testFrameworks += new TestFramework("utest.runner.Framework")
   )
