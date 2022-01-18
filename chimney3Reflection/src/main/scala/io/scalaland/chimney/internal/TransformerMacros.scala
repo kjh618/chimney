@@ -4,14 +4,13 @@ import io.scalaland.chimney.Transformer
 import io.scalaland.chimney.dsl.TransformerDefinition
 import io.scalaland.chimney.internal.InlineTransformer
 
-import scala.compiletime.erasedValue
 import scala.deriving.Mirror
 import scala.quoted.*
 
 object TransformerMacros {
 
-  def genTransformBody[From: Type, To: Type, TransformerOperations <: Tuple: Type](
-      transformerDefinition: Expr[TransformerDefinition[From, To, TransformerOperations]],
+  def genTransformBody[From: Type, To: Type, Operations <: Tuple: Type](
+      definition: Expr[TransformerDefinition[From, To, Operations]],
       src: Expr[From]
   )(using Quotes): Expr[To] = {
     import quotes.reflect.*
@@ -29,7 +28,7 @@ object TransformerMacros {
     val destFieldValues = (destFieldNames zip destFieldTypeReprs).map { (destFieldName, destFieldTypeRepr) =>
       destFieldTypeRepr.asType match {
         case '[destFieldType] =>
-          genDestFieldValue[From, To, TransformerOperations, destFieldType](transformerDefinition, src, destFieldName)
+          genDestFieldValue[From, To, Operations, destFieldType](definition, src, destFieldName)
       }
     }
 
@@ -40,15 +39,15 @@ object TransformerMacros {
     New(Inferred(destTypeRepr)).select(destConstructorSymbol).appliedToArgs(destFieldValueTerms).asExprOf[To]
   }
 
-  def genDestFieldValue[From: Type, To: Type, TransformerOperations <: Tuple: Type, DestFieldType: Type](
-      transformerDefinition: Expr[TransformerDefinition[From, To, TransformerOperations]],
+  def genDestFieldValue[From: Type, To: Type, Operations <: Tuple: Type, DestFieldType: Type](
+      definition: Expr[TransformerDefinition[From, To, Operations]],
       src: Expr[From],
       destFieldName: String
   )(using Quotes): Expr[DestFieldType] = {
     import quotes.reflect.*
 
-    genDestFieldValueFromOverrides[From, To, TransformerOperations, DestFieldType](
-      transformerDefinition,
+    genDestFieldValueFromOverrides[From, To, Operations, DestFieldType](
+      definition,
       destFieldName
     ) match {
       case Some(destFieldValueFromOverrides) => destFieldValueFromOverrides
@@ -82,18 +81,17 @@ object TransformerMacros {
   def genDestFieldValueFromOverrides[
       From: Type,
       To: Type,
-      TransformerOperations <: Tuple: Type,
+      Operations <: Tuple: Type,
       DestFieldType: Type
   ](
-      transformerDefinition: Expr[TransformerDefinition[From, To, ? <: Tuple]],
+      definition: Expr[TransformerDefinition[From, To, ? <: Tuple]],
       destFieldName: String
   )(using Quotes): Option[Expr[DestFieldType]] =
-    Type.of[TransformerOperations] match {
-      case '[TransformerOperation.FieldConst[name] *: tail]
-          if Type.valueOfConstant[name].get == destFieldName => // TODO
-        Some('{ $transformerDefinition.overrides(${ Expr(destFieldName) }).asInstanceOf[DestFieldType] })
+    Type.of[Operations] match {
+      case '[TransformerOperation.FieldConst[name] *: _] if Type.valueOfConstant[name].get == destFieldName => // TODO
+        Some('{ $definition.overrides(${ Expr(destFieldName) }).asInstanceOf[DestFieldType] })
       case '[_ *: tail] =>
-        genDestFieldValueFromOverrides[From, To, tail, DestFieldType](transformerDefinition, destFieldName)
+        genDestFieldValueFromOverrides[From, To, tail, DestFieldType](definition, destFieldName)
       case '[EmptyTuple] => None
     }
 }

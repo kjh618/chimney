@@ -3,7 +3,7 @@ package io.scalaland.chimney.dsl
 import io.scalaland.chimney.Transformer
 import io.scalaland.chimney.internal.dsl.TransformerDefinitionImpl
 
-case class TransformerDefinition[From, To, TransformerOperations <: Tuple](
+case class TransformerDefinition[From, To, Operations <: Tuple](
     overrides: Map[String, Any]
 ) {
 

@@ -4,9 +4,9 @@ import io.scalaland.chimney.Transformer
 
 import scala.compiletime.summonFrom
 
-case class TransformerInto[From, To, TransformerOperations <: Tuple](
+case class TransformerInto[From, To, Operations <: Tuple](
     src: From,
-    definition: TransformerDefinition[From, To, TransformerOperations]
+    definition: TransformerDefinition[From, To, Operations]
 ) {
 
   transparent inline def withFieldConst[T, U](
@@ -25,7 +25,7 @@ case class TransformerInto[From, To, TransformerOperations <: Tuple](
       inline newDefinition: TransformerDefinition[From, To, ? <: Tuple]
   ): TransformerInto[From, To, ? <: Tuple] =
     inline newDefinition match {
-      case d: TransformerDefinition[From, To, newTransformerOperations] =>
-        TransformerInto[From, To, newTransformerOperations](src, d)
+      case d: TransformerDefinition[From, To, newOperations] =>
+        TransformerInto[From, To, newOperations](src, d)
     }
 }
