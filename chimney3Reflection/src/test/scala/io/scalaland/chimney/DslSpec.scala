@@ -1,36 +1,12 @@
 package io.scalaland.chimney
 
 import io.scalaland.chimney.dsl.*
-import io.scalaland.chimney.internal.dsl.TransformerDefinitionImpl
 import io.scalaland.chimney.internal.utils.MacroUtils.inspect
 import utest.*
 
 object DslSpec extends TestSuite {
 
   val tests = Tests {
-
-    case class Value1(a: Int)
-    case class Value2(a: Int)
-    case class Values1(a: Value1, b: Int, c: Int)
-    case class Values2(a: Value2, b: Int, c: Int)
-
-    "temp 1" - {
-      Values1(Value1(1), 2, 3).transformInto[Values2] ==> Values2(Value2(1), 2, 3)
-    }
-
-    "temp 2" - {
-      val transformer = Transformer
-        .define[Values1, Values2]
-        .withFieldConst(_.b, 2)
-        .withFieldConst(_.c, 3)
-        .buildTransformer
-
-      transformer.transform(Values1(Value1(1), 1, 1)) ==> Values2(Value2(1), 2, 3)
-    }
-
-    "temp 3" - {
-      Value1(1).into[Value2].withFieldConst(_.a, 2).transform ==> Value2(2)
-    }
 
     "use implicit transformer directly" - {
 
